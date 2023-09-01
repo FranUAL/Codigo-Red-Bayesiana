@@ -1,0 +1,197 @@
+
+load("ictus.RData")
+library(MoTBFs)
+library(plyr)
+library(bnlearn)
+library(bnstruct)
+library(discretization)
+
+dim(datos)
+str(datos)
+head(datos)
+
+load("Datos_Finales.RData")
+
+
+#### Paquetes interesantes para redes ####
+library(tidyverse)
+library(repmis)
+library(MoTBFs)
+library(plyr)
+library(bnlearn)
+library(bnstruct)
+library(discretization)
+library(devtools)
+
+
+#### Limpieza de varaibles ####
+
+for (i in 20:dim(datos)[2]) {
+  datos[,i] <- revalue(datos[,i], c("No"=0))
+  datos[,i] <- revalue(datos[,i], c("Si"=1))
+}
+
+datos<-datos[,-c(1:8)]
+datos$Ingr_UCI <- revalue(datos$Ingr_UCI, c("No"=0))
+datos$Ingr_UCI <- revalue(datos$Ingr_UCI, c("Si"=1))
+datos <- datos[,-c(3,7,10,11)]
+datos$Exitus <- revalue(datos$Exitus, c("No"=0))
+datos$Exitus <- revalue(datos$Exitus, c("Si"=1))
+datos <- na.omit(datos)
+
+
+library(randomForest)
+
+modelo <- randomForest(Exitus~., data = datos)
+importancia <- importance(modelo)
+data.frame(importancia = sort(importancia[, 1], decreasing = T))
+
+#Creamos el data frame final
+
+Datos_Finales_1 <- datos[,c(1,4,6,7,8,18,19,20,36,39,50,51,52,53,62)]
+
+#Datos_Finales_1 <- Datos_Finales_1[,-2]
+
+str(Datos_Finales_1)
+
+#### Todas la varaibles ####
+
+datos_F <-datos
+factores <- sapply(datos_F,is.factor)
+datos_F[,factores] <- sapply(datos_F[,factores],as.character)
+dataTT <- TrainingandTestData(datos_F, percentage_test = 0.2,
+                              discreteVariables = c(1:2,7:16))
+
+trainingData <- dataTT$Training
+dag <- LearningHC(trainingData)
+dag
+plot(dag)
+
+help("LearningHC")
+
+#### 15 varaibles ####
+
+#manea 1
+dataTT <- TrainingandTestData(datos_F, percentage_test = 0.5) 
+
+#manera 2
+train <- sample(nrow(Datos_Finales_1), 0.8*nrow(Datos_Finales_1))
+dataTT <- Datos_Finales_1[train,] 
+
+#manera 3
+
+factores <- sapply(Datos_Finales_1,is.factor)
+Datos_Finales_1[,factores] <- sapply(Datos_Finales_1[,factores],as.character)
+
+dataTT <- TrainingandTestData(Datos_Finales_1, percentage_test = 0.5,
+                              discreteVariables = c(1:2,7:16))
+trainingData <- dataTT$Training
+dag <- LearningHC(trainingData)
+dag
+plot(dag)
+
+
+
+
+
+
+
+#### TAN ####
+
+library(bnclassify)
+
+
+datos_F <- as.numeric(datos_F)
+hist(datos_F$Edad)
+
+library(bnclassify)
+for (i in 1:nrow(Datos_Finales_1)) {
+  if(Datos_Finales_1$Edad[i]<= 20){
+    Datos_Finales_1$Edad[i] = 20}else{
+      if(Datos_Finales_1$Edad[i]<= 60){
+        Datos_Finales_1$Edad[i] = 60} else{
+          Datos_Finales_1$Edad[i] = 80}
+    }
+  }
+
+numerico <- sapply(Datos_Finales_1,is.numeric)
+Datos_Finales_1[,numerico] <- sapply(Datos_Finales_1[,numerico],as.factor)
+str(Datos_Finales_1)
+caracter <- sapply(Datos_Finales_1,is.character)
+Datos_Finales_1[,caracter] <- lapply(Datos_Finales_1[,caracter], as.factor)
+
+nb <- nb('Exitus', Datos_Finales_1)
+nb <- lp(nb, Datos_Finales_1, smooth = 0.01)
+
+ode_cl_aic <- tan_cl('Exitus', Datos_Finales_1, score = 'aic')
+fssj <- fssj('Exitus', Datos_Finales_1, k = 5, epsilon = 0)
+
+ode_cl_aic <- bnc('tan_cl', 'Exitus', Datos_Finales_1, smooth = 1,
+                  dag_args = list(score = 'aic'))
+
+ode_cl_aic
+
+help("bnc")
+
+ms <- modelstring(ode_cl_aic)
+strwrap(ms)
+library(bnlearn)
+dag.bnlearn = model2network("[Exitus][Edad|Exitus][Riesgo_Mortalidad_APR|Edad:Exitus][HTA_r|Edad:Exitus][Nivel_Severidad_APR|Riesgo_Mortalidad_APR:Exitus][ICC_r|Riesgo_Mortalidad_APR:Exitus][Tabaco_r|Riesgo_Mortalidad_APR:Exitus][DM_2_r|HTA_r:Exitus][ERC_rr|Riesgo_Mortalidad_APR:Exitus][Coma_rr|Riesgo_Mortalidad_APR:Exitus][CIsquem_cronic_rr|Nivel_Severidad_APR:Exitus][Hemiparesia_plejia_rr|Nivel_Severidad_APR:Exitus][Afasia_rr|Nivel_Severidad_APR:Exitus][Insuf_Resp|Nivel_Severidad_APR:Exitus][Disartria|Hemiparesia_plejia_rr:Exitus]")
+dag.bnlearn
+plot(dag.bnlearn)
+
+
+#hist(datos$Edad)
+
+#### Ejemplo Naive y TAN ####
+
+library(bnlearn)
+RED_1 = model2network("[A][X1|A][X2|A][X3|A]")
+RED_2 = model2network("[A][X1|A][X2|A:X3][X3|A]")
+RED_1
+RED_2
+plot(RED_1)
+plot(RED_2)
+
+
+
+
+
+
+
+
+
+
+
+
+#### Predicciones ####
+
+
+train <- sample(nrow(Datos_Finales_1), 0.8*nrow(Datos_Finales_1))
+ode_cl_aic_1 <- bnc('tan_cl', 'Exitus', Datos_Finales_1[train, ], smooth = 1, dag_args = list(score = 'aic'))
+ode_cl_aic_1
+
+prediccion <- predict(ode_cl_aic_1, Datos_Finales_1[-train, ])
+prediccion
+sum(prediccion == Datos_Finales_1[-train, 1])
+help("predict")
+
+#Procentaje
+sum(prediccion == Datos_Finales_1[-train, 1])/length(Datos_Finales_1[-train, 1])
+
+
+
+sum(Datos_Finales_1[-train,1]==1)
+sum(Datos_Finales_1[-train,1]==0)
+
+table(prediccion, Datos_Finales_1[-train, 1]) #por filas esta lo correcto, por culumnas los que predice
+
+library(caret)
+confusionMatrix(data = prediccion, reference = Datos_Finales_1[-train,1])
+
+
+
+
+
+
+
